@@ -100,6 +100,9 @@ type Logger struct {
 	// time.
 	LocalTime bool `json:"localtime" yaml:"localtime"`
 
+	// ch is the channel to write the logs
+	ch chan []byte
+
 	size int64
 	file *os.File
 	mu   sync.Mutex
@@ -110,7 +113,7 @@ var (
 	currentTime = time.Now
 
 	// os_Stat exists so it can be mocked out by tests.
-	os_Stat = os.Stat
+	osStat = os.Stat
 
 	// megabyte is the conversion factor between MaxSize and bytes.  It is a
 	// variable so tests can mock it out and not need to write megabytes of data
@@ -118,11 +121,51 @@ var (
 	megabyte = 1024 * 1024
 )
 
+// NewLogger returns the iniatilized logger
+func NewLogger(filename string, maxSize, maxAge, maxBackups int, localTime bool, chSize int) *Logger {
+	logger := &Logger{
+		Filename:   filename,
+		MaxSize:    maxSize,
+		MaxAge:     maxAge,
+		MaxBackups: maxBackups,
+		LocalTime:  localTime,
+		ch:         make(chan []byte, chSize),
+	}
+
+	go func() {
+	outer:
+		for {
+			select {
+			case p, ok := <-logger.ch:
+				if ok {
+					logger.write(p)
+				} else {
+					break outer
+				}
+			}
+		}
+	}()
+
+	return logger
+}
+
 // Write implements io.Writer.  If a write would cause the log file to be larger
 // than MaxSize, the file is closed, renamed to include a timestamp of the
 // current time, and a new log file is created using the original log file name.
 // If the length of the write is greater than MaxSize, an error is returned.
 func (l *Logger) Write(p []byte) (n int, err error) {
+	writeLen := int64(len(p))
+	if writeLen > l.max() {
+		return 0, fmt.Errorf(
+			"write length %d exceeds maximum file size %d", writeLen, l.max(),
+		)
+	}
+
+	l.ch <- p
+	return len(p), nil
+}
+
+func (l *Logger) write(p []byte) (n int, err error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
@@ -155,6 +198,9 @@ func (l *Logger) Write(p []byte) (n int, err error) {
 func (l *Logger) Close() error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
+
+	close(l.ch)
+
 	return l.close()
 }
 
@@ -203,7 +249,7 @@ func (l *Logger) openNew() error {
 
 	name := l.filename()
 	mode := os.FileMode(0644)
-	info, err := os_Stat(name)
+	info, err := osStat(name)
 	if err == nil {
 		// Copy the mode off the old logfile.
 		mode = info.Mode()
@@ -253,7 +299,7 @@ func backupName(name string, local bool) string {
 // put it over the MaxSize, a new file is created.
 func (l *Logger) openExistingOrNew(writeLen int) error {
 	filename := l.filename()
-	info, err := os_Stat(filename)
+	info, err := osStat(filename)
 	if os.IsNotExist(err) {
 		return l.openNew()
 	}

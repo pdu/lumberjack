@@ -33,14 +33,15 @@ func TestNewFile(t *testing.T) {
 
 	dir := makeTempDir("TestNewFile", t)
 	defer os.RemoveAll(dir)
-	l := &Logger{
-		Filename: logFile(dir),
-	}
+	l := NewLogger(logFile(dir), 0, 0, 0, false, 1)
 	defer l.Close()
 	b := []byte("boo!")
 	n, err := l.Write(b)
 	isNil(err, t)
 	equals(len(b), n, t)
+
+	time.Sleep(time.Second)
+
 	existsWithLen(logFile(dir), n, t)
 	fileCount(dir, 1, t)
 }
@@ -56,14 +57,14 @@ func TestOpenExisting(t *testing.T) {
 	isNil(err, t)
 	existsWithLen(filename, len(data), t)
 
-	l := &Logger{
-		Filename: filename,
-	}
+	l := NewLogger(logFile(dir), 0, 0, 0, false, 1)
 	defer l.Close()
 	b := []byte("boo!")
 	n, err := l.Write(b)
 	isNil(err, t)
 	equals(len(b), n, t)
+
+	time.Sleep(time.Second)
 
 	// make sure the file got appended
 	existsWithLen(filename, len(data)+n, t)
@@ -77,10 +78,7 @@ func TestWriteTooLong(t *testing.T) {
 	megabyte = 1
 	dir := makeTempDir("TestWriteTooLong", t)
 	defer os.RemoveAll(dir)
-	l := &Logger{
-		Filename: logFile(dir),
-		MaxSize:  5,
-	}
+	l := NewLogger(logFile(dir), 5, 0, 0, false, 1)
 	defer l.Close()
 	b := []byte("booooooooooooooo!")
 	n, err := l.Write(b)
@@ -88,6 +86,9 @@ func TestWriteTooLong(t *testing.T) {
 	equals(0, n, t)
 	equals(err.Error(),
 		fmt.Sprintf("write length %d exceeds maximum file size %d", len(b), l.MaxSize), t)
+
+	time.Sleep(time.Second)
+
 	_, err = os.Stat(logFile(dir))
 	assert(os.IsNotExist(err), t, "File exists, but should not have been created")
 }
@@ -98,14 +99,15 @@ func TestMakeLogDir(t *testing.T) {
 	dir = filepath.Join(os.TempDir(), dir)
 	defer os.RemoveAll(dir)
 	filename := logFile(dir)
-	l := &Logger{
-		Filename: filename,
-	}
+	l := NewLogger(filename, 0, 0, 0, false, 1)
 	defer l.Close()
 	b := []byte("boo!")
 	n, err := l.Write(b)
 	isNil(err, t)
 	equals(len(b), n, t)
+
+	time.Sleep(time.Second)
+
 	existsWithLen(logFile(dir), n, t)
 	fileCount(dir, 1, t)
 }
@@ -115,13 +117,16 @@ func TestDefaultFilename(t *testing.T) {
 	dir := os.TempDir()
 	filename := filepath.Join(dir, filepath.Base(os.Args[0])+"-lumberjack.log")
 	defer os.Remove(filename)
-	l := &Logger{}
+	l := NewLogger("", 0, 0, 0, false, 1)
 	defer l.Close()
 	b := []byte("boo!")
 	n, err := l.Write(b)
 
 	isNil(err, t)
 	equals(len(b), n, t)
+
+	time.Sleep(time.Second)
+
 	existsWithLen(filename, n, t)
 }
 
@@ -133,15 +138,14 @@ func TestAutoRotate(t *testing.T) {
 	defer os.RemoveAll(dir)
 
 	filename := logFile(dir)
-	l := &Logger{
-		Filename: filename,
-		MaxSize:  10,
-	}
+	l := NewLogger(filename, 10, 0, 0, false, 1)
 	defer l.Close()
 	b := []byte("boo!")
 	n, err := l.Write(b)
 	isNil(err, t)
 	equals(len(b), n, t)
+
+	time.Sleep(time.Second)
 
 	existsWithLen(filename, n, t)
 	fileCount(dir, 1, t)
@@ -152,6 +156,8 @@ func TestAutoRotate(t *testing.T) {
 	n, err = l.Write(b2)
 	isNil(err, t)
 	equals(len(b2), n, t)
+
+	time.Sleep(time.Second)
 
 	// the old logfile should be moved aside and the main logfile should have
 	// only the last write in it.
@@ -170,10 +176,7 @@ func TestFirstWriteRotate(t *testing.T) {
 	defer os.RemoveAll(dir)
 
 	filename := logFile(dir)
-	l := &Logger{
-		Filename: filename,
-		MaxSize:  10,
-	}
+	l := NewLogger(filename, 10, 0, 0, false, 1)
 	defer l.Close()
 
 	start := []byte("boooooo!")
@@ -188,6 +191,8 @@ func TestFirstWriteRotate(t *testing.T) {
 	isNil(err, t)
 	equals(len(b), n, t)
 
+	time.Sleep(time.Second)
+
 	existsWithLen(filename, n, t)
 	existsWithLen(backupFile(dir), len(start), t)
 
@@ -201,16 +206,14 @@ func TestMaxBackups(t *testing.T) {
 	defer os.RemoveAll(dir)
 
 	filename := logFile(dir)
-	l := &Logger{
-		Filename:   filename,
-		MaxSize:    10,
-		MaxBackups: 1,
-	}
+	l := NewLogger(filename, 10, 0, 1, false, 1)
 	defer l.Close()
 	b := []byte("boo!")
 	n, err := l.Write(b)
 	isNil(err, t)
 	equals(len(b), n, t)
+
+	time.Sleep(time.Second)
 
 	existsWithLen(filename, n, t)
 	fileCount(dir, 1, t)
@@ -222,6 +225,8 @@ func TestMaxBackups(t *testing.T) {
 	n, err = l.Write(b2)
 	isNil(err, t)
 	equals(len(b2), n, t)
+
+	time.Sleep(time.Second)
 
 	// this will use the new fake time
 	secondFilename := backupFile(dir)
@@ -239,6 +244,8 @@ func TestMaxBackups(t *testing.T) {
 	isNil(err, t)
 	equals(len(b2), n, t)
 
+	time.Sleep(time.Second)
+
 	// this will use the new fake time
 	thirdFilename := backupFile(dir)
 	existsWithLen(thirdFilename, len(b2), t)
@@ -248,6 +255,8 @@ func TestMaxBackups(t *testing.T) {
 	// we need to wait a little bit since the files get deleted on a different
 	// goroutine.
 	<-time.After(time.Millisecond * 10)
+
+	time.Sleep(time.Second)
 
 	// should only have two files in the dir still
 	fileCount(dir, 2, t)
@@ -268,6 +277,8 @@ func TestMaxBackups(t *testing.T) {
 	err = ioutil.WriteFile(notlogfile, []byte("data"), 0644)
 	isNil(err, t)
 
+	time.Sleep(time.Second)
+
 	// Make a directory that exactly matches our log file filters... it still
 	// shouldn't get caught by the deletion filter since it's a directory.
 	notlogfiledir := backupFile(dir)
@@ -281,6 +292,8 @@ func TestMaxBackups(t *testing.T) {
 	isNil(err, t)
 	equals(len(b2), n, t)
 
+	time.Sleep(time.Second)
+
 	// this will use the new fake time
 	fourthFilename := backupFile(dir)
 	existsWithLen(fourthFilename, len(b2), t)
@@ -292,6 +305,8 @@ func TestMaxBackups(t *testing.T) {
 	// We should have four things in the directory now - the 2 log files, the
 	// not log file, and the directory
 	fileCount(dir, 4, t)
+
+	time.Sleep(time.Second)
 
 	// third file name should still exist
 	existsWithLen(filename, n, t)
@@ -342,11 +357,7 @@ func TestCleanupExistingBackups(t *testing.T) {
 	err = ioutil.WriteFile(filename, data, 0644)
 	isNil(err, t)
 
-	l := &Logger{
-		Filename:   filename,
-		MaxSize:    10,
-		MaxBackups: 1,
-	}
+	l := NewLogger(filename, 10, 0, 1, false, 1)
 	defer l.Close()
 
 	newFakeTime()
@@ -360,6 +371,8 @@ func TestCleanupExistingBackups(t *testing.T) {
 	// goroutine.
 	<-time.After(time.Millisecond * 10)
 
+	time.Sleep(time.Second)
+
 	// now we should only have 2 files left - the primary and one backup
 	fileCount(dir, 2, t)
 }
@@ -372,16 +385,14 @@ func TestMaxAge(t *testing.T) {
 	defer os.RemoveAll(dir)
 
 	filename := logFile(dir)
-	l := &Logger{
-		Filename: filename,
-		MaxSize:  10,
-		MaxAge:   1,
-	}
+	l := NewLogger(filename, 10, 1, 0, false, 1)
 	defer l.Close()
 	b := []byte("boo!")
 	n, err := l.Write(b)
 	isNil(err, t)
 	equals(len(b), n, t)
+
+	time.Sleep(time.Second)
 
 	existsWithLen(filename, n, t)
 	fileCount(dir, 1, t)
@@ -393,11 +404,15 @@ func TestMaxAge(t *testing.T) {
 	n, err = l.Write(b2)
 	isNil(err, t)
 	equals(len(b2), n, t)
+	time.Sleep(time.Second)
+
 	existsWithLen(backupFile(dir), len(b), t)
 
 	// we need to wait a little bit since the files get deleted on a different
 	// goroutine.
 	<-time.After(10 * time.Millisecond)
+
+	time.Sleep(time.Second)
 
 	// We should still have 2 log files, since the most recent backup was just
 	// created.
@@ -415,11 +430,15 @@ func TestMaxAge(t *testing.T) {
 	n, err = l.Write(b2)
 	isNil(err, t)
 	equals(len(b3), n, t)
+	time.Sleep(time.Second)
+
 	existsWithLen(backupFile(dir), len(b2), t)
 
 	// we need to wait a little bit since the files get deleted on a different
 	// goroutine.
 	<-time.After(10 * time.Millisecond)
+
+	time.Sleep(time.Second)
 
 	// We should have 2 log files - the main log file, and the most recent
 	// backup.  The earlier backup is past the cutoff and should be gone.
@@ -462,9 +481,11 @@ func TestOldLogFiles(t *testing.T) {
 	err = ioutil.WriteFile(backup2, data, 07)
 	isNil(err, t)
 
-	l := &Logger{Filename: filename}
+	l := NewLogger(filename, 0, 0, 0, false, 1)
 	files, err := l.oldLogFiles()
 	isNil(err, t)
+	time.Sleep(time.Second)
+
 	equals(2, len(files), t)
 
 	// should be sorted by newest file first, which would be t2
@@ -495,11 +516,7 @@ func TestLocalTime(t *testing.T) {
 	dir := makeTempDir("TestLocalTime", t)
 	defer os.RemoveAll(dir)
 
-	l := &Logger{
-		Filename:  logFile(dir),
-		MaxSize:   10,
-		LocalTime: true,
-	}
+	l := NewLogger(logFile(dir), 10, 0, 0, true, 1)
 	defer l.Close()
 	b := []byte("boo!")
 	n, err := l.Write(b)
@@ -510,6 +527,8 @@ func TestLocalTime(t *testing.T) {
 	n2, err := l.Write(b2)
 	isNil(err, t)
 	equals(len(b2), n2, t)
+
+	time.Sleep(time.Second)
 
 	existsWithLen(logFile(dir), n2, t)
 	existsWithLen(backupFileLocal(dir), n, t)
@@ -522,16 +541,14 @@ func TestRotate(t *testing.T) {
 
 	filename := logFile(dir)
 
-	l := &Logger{
-		Filename:   filename,
-		MaxBackups: 1,
-		MaxSize:    100, // megabytes
-	}
+	l := NewLogger(filename, 100, 0, 1, false, 1)
 	defer l.Close()
 	b := []byte("boo!")
 	n, err := l.Write(b)
 	isNil(err, t)
 	equals(len(b), n, t)
+
+	time.Sleep(time.Second)
 
 	existsWithLen(filename, n, t)
 	fileCount(dir, 1, t)
@@ -544,6 +561,8 @@ func TestRotate(t *testing.T) {
 	// we need to wait a little bit since the files get deleted on a different
 	// goroutine.
 	<-time.After(10 * time.Millisecond)
+
+	time.Sleep(time.Second)
 
 	filename2 := backupFile(dir)
 	existsWithLen(filename2, n, t)
@@ -558,6 +577,8 @@ func TestRotate(t *testing.T) {
 	// goroutine.
 	<-time.After(10 * time.Millisecond)
 
+	time.Sleep(time.Second)
+
 	filename3 := backupFile(dir)
 	existsWithLen(filename3, 0, t)
 	existsWithLen(filename, 0, t)
@@ -567,6 +588,8 @@ func TestRotate(t *testing.T) {
 	n, err = l.Write(b2)
 	isNil(err, t)
 	equals(len(b2), n, t)
+
+	time.Sleep(time.Second)
 
 	// this will use the new fake time
 	existsWithLen(filename, n, t)
@@ -582,7 +605,7 @@ func TestJson(t *testing.T) {
 	"localtime": true
 }`[1:])
 
-	l := Logger{}
+	l := NewLogger("", 0, 0, 0, false, 1)
 	err := json.Unmarshal(data, &l)
 	isNil(err, t)
 	equals("foo", l.Filename, t)
@@ -600,7 +623,7 @@ maxage: 10
 maxbackups: 3
 localtime: true`[1:])
 
-	l := Logger{}
+	l := NewLogger("", 0, 0, 0, false, 1)
 	err := yaml.Unmarshal(data, &l)
 	isNil(err, t)
 	equals("foo", l.Filename, t)
@@ -618,7 +641,7 @@ maxage = 10
 maxbackups = 3
 localtime = true`[1:]
 
-	l := Logger{}
+	l := NewLogger("", 0, 0, 0, false, 1)
 	md, err := toml.Decode(data, &l)
 	isNil(err, t)
 	equals("foo", l.Filename, t)
